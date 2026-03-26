@@ -23,15 +23,14 @@ RUN rm /tmp/cline.vsix
 USER coder
 
 # Copy code-server and VS Code default settings
-COPY config/code-server.yaml /home/coder/.config/code-server/config.yaml
+# code-server runs as root (upstream entrypoint behaviour), so configs go under /root
 USER root
-RUN mkdir -p /home/coder/.local/share/code-server/User
-COPY config/settings.json /home/coder/.local/share/code-server/User/settings.json
-RUN chown -R coder:coder /home/coder/.config /home/coder/.local
-USER coder
+RUN mkdir -p /root/.config/code-server /root/.local/share/code-server/User
+COPY config/code-server.yaml /root/.config/code-server/config.yaml
+COPY config/settings.json /root/.local/share/code-server/User/settings.json
 
 # Copy MCP config (hostname substituted for container networking)
-COPY config/mcp-container.json /home/coder/config/mcp.json
+COPY config/mcp-container.json /root/config/mcp.json
 
 # Use our entrypoint
 USER root

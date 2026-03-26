@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-MCP_CONFIG_SRC="/home/coder/config/mcp.json"
-MCP_CONFIG_DIR="/home/coder/.local/share/code-server/User/globalStorage/saoudrizwan.claude-dev/settings"
+MCP_CONFIG_SRC="/root/config/mcp.json"
+MCP_CONFIG_DIR="/root/.local/share/code-server/User/globalStorage/saoudrizwan.claude-dev/settings"
 MCP_CONFIG_DST="${MCP_CONFIG_DIR}/cline_mcp_settings.json"
 
 # Copy MCP config to Cline's settings path
