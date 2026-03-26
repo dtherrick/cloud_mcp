@@ -1,0 +1,12 @@
+# ABOUTME: Builds the cloud-ide image: VS Code (code-server) + Cline + Bedrock + MCP
+# ABOUTME: Built incrementally — each task in the plan adds one layer of functionality.
+
+FROM codercom/code-server:latest
+
+# Install Node.js 20 LTS via NodeSource
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && rm -rf /var/lib/apt/lists/*
+USER coder
