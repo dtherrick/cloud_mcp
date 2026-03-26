@@ -12,15 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 USER coder
 
 # Install Cline extension
-USER root
+# ADD as coder (avoids permission issues), install as root so extension lands in /root/.local
 ARG CLINE_VERSION=3.75.0
+USER coder
 ADD https://github.com/cline/cline/releases/download/v${CLINE_VERSION}/cline-${CLINE_VERSION}.vsix /tmp/cline.vsix
-RUN chmod 644 /tmp/cline.vsix
-USER coder
-RUN code-server --install-extension /tmp/cline.vsix
 USER root
-RUN rm /tmp/cline.vsix
-USER coder
+RUN cp /tmp/cline.vsix /tmp/cline-root.vsix \
+  && code-server --install-extension /tmp/cline-root.vsix \
+  && rm /tmp/cline.vsix /tmp/cline-root.vsix
 
 # Copy code-server and VS Code default settings
 # code-server runs as root (upstream entrypoint behaviour), so configs go under /root
