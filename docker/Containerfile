@@ -21,3 +21,11 @@ RUN code-server --install-extension /tmp/cline.vsix
 USER root
 RUN rm /tmp/cline.vsix
 USER coder
+
+# Copy code-server and VS Code default settings
+COPY config/code-server.yaml /home/coder/.config/code-server/config.yaml
+USER root
+RUN mkdir -p /home/coder/.local/share/code-server/User
+COPY config/settings.json /home/coder/.local/share/code-server/User/settings.json
+RUN chown -R coder:coder /home/coder/.config /home/coder/.local
+USER coder
