@@ -101,17 +101,17 @@ Once verified, write a minimal `Containerfile` that extends the base image (even
 
 **Goal:** Cline appears in the VS Code sidebar.
 
-Add to `Containerfile`: download the Cline `.vsix` at build time (pinned version from GitHub releases) and install it with `code-server --install-extension`.
+Add to `Containerfile`: download the Cline `.vsix` at build time via `ADD` with a pinned GitHub Releases URL, then install it with `code-server --install-extension`. Node.js is available in the `codercom/code-server` base image (it ships with it), which is required for `npx mcp-remote` in Step 4.
 
 ```dockerfile
 FROM codercom/code-server:latest
 
-# Install Cline extension
-COPY cline.vsix /tmp/cline.vsix
+ARG CLINE_VERSION=3.14.1
+ADD https://github.com/cline/cline/releases/download/v${CLINE_VERSION}/cline-${CLINE_VERSION}.vsix /tmp/cline.vsix
 RUN code-server --install-extension /tmp/cline.vsix && rm /tmp/cline.vsix
 ```
 
-The `.vsix` is fetched as part of the build (via `ADD` with a URL, or pre-downloaded and `COPY`'d). Version is pinned.
+The version is pinned via `ARG CLINE_VERSION`. To update, change the ARG value and rebuild. Verify the exact release filename on [Cline's GitHub Releases](https://github.com/cline/cline/releases) before building.
 
 **Commit:** `feat: add cline extension`
 
