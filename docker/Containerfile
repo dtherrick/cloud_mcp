@@ -13,7 +13,7 @@ USER coder
 
 # Install Cline extension
 # ADD as coder (avoids permission issues), install as root so extension lands in /root/.local
-ARG CLINE_VERSION=3.75.0
+ARG CLINE_VERSION=3.76.0
 USER coder
 ADD https://github.com/cline/cline/releases/download/v${CLINE_VERSION}/cline-${CLINE_VERSION}.vsix /tmp/cline.vsix
 USER root
