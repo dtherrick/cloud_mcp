@@ -29,3 +29,12 @@ RUN mkdir -p /home/coder/.local/share/code-server/User
 COPY config/settings.json /home/coder/.local/share/code-server/User/settings.json
 RUN chown -R coder:coder /home/coder/.config /home/coder/.local
 USER coder
+
+# Copy MCP config (hostname substituted for container networking)
+COPY config/mcp-container.json /home/coder/config/mcp.json
+
+# Use our entrypoint
+USER root
+COPY entrypoint.sh /home/coder/entrypoint.sh
+RUN chmod +x /home/coder/entrypoint.sh
+ENTRYPOINT ["/home/coder/entrypoint.sh"]
