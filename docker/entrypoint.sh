@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# ABOUTME: Container startup script — configures workspace and launches code-server.
-# ABOUTME: Copies MCP config to Cline's settings path at startup.
+# ABOUTME: Container entrypoint — writes Continue config then launches supervisord.
+# ABOUTME: supervisord manages both code-server and the LiteLLM proxy.
 
 set -euo pipefail
 
-MCP_CONFIG_SRC="/root/config/mcp.json"
-MCP_CONFIG_DIR="/root/.local/share/code-server/User/globalStorage/saoudrizwan.claude-dev/settings"
-MCP_CONFIG_DST="${MCP_CONFIG_DIR}/cline_mcp_settings.json"
+CONTINUE_CONFIG_TEMPLATE="/root/config/continue-config.yaml"
+CONTINUE_CONFIG_DST="/root/.continue/config.yaml"
 
-# Copy MCP config to Cline's settings path
-if [[ -f "${MCP_CONFIG_SRC}" ]]; then
-  mkdir -p "${MCP_CONFIG_DIR}"
-  cp "${MCP_CONFIG_SRC}" "${MCP_CONFIG_DST}"
-  echo "MCP config written to ${MCP_CONFIG_DST}"
+# Write Continue config, substituting runtime env vars (e.g. SPLUNK_MCP_TOKEN)
+if [[ -f "${CONTINUE_CONFIG_TEMPLATE}" ]]; then
+  mkdir -p "$(dirname "${CONTINUE_CONFIG_DST}")"
+  envsubst < "${CONTINUE_CONFIG_TEMPLATE}" > "${CONTINUE_CONFIG_DST}"
+  echo "Continue config written to ${CONTINUE_CONFIG_DST}"
 fi
 
-exec /usr/bin/entrypoint.sh "$@"
+exec supervisord -c /root/config/supervisord.conf

@@ -1,38 +1,35 @@
-# ABOUTME: Builds the cloud-ide image: VS Code (code-server) + Cline + Bedrock + MCP
-# ABOUTME: Built incrementally — each task in the plan adds one layer of functionality.
+# ABOUTME: Builds the cloud-ide image: VS Code (code-server) + Continue + LiteLLM + MCP
+# ABOUTME: LiteLLM proxies OpenAI so Continue needs no API key configuration.
 
 FROM codercom/code-server:latest
 
-# Install Node.js 20 LTS via NodeSource
+# Install Node.js 20 LTS, pip, and supervisord
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates gettext-base python3-pip supervisor \
   && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
   && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
-USER coder
 
-# Install Cline extension
-# ADD as coder (avoids permission issues), install as root so extension lands in /root/.local
-ARG CLINE_VERSION=3.76.0
-USER coder
-ADD https://github.com/cline/cline/releases/download/v${CLINE_VERSION}/cline-${CLINE_VERSION}.vsix /tmp/cline.vsix
-USER root
-RUN cp /tmp/cline.vsix /tmp/cline-root.vsix \
-  && code-server --install-extension /tmp/cline-root.vsix \
-  && rm /tmp/cline.vsix /tmp/cline-root.vsix
+# Install LiteLLM proxy
+RUN pip3 install --no-cache-dir --break-system-packages 'litellm[proxy]'
 
-# Copy code-server and VS Code default settings
+# Inject Cisco TLS inspection CA into certifi's bundle so LiteLLM can reach external APIs
+COPY config/cisco-ca.crt /tmp/cisco-ca.crt
+RUN cat /tmp/cisco-ca.crt >> $(python3 -m certifi) && rm /tmp/cisco-ca.crt
+
+# Install Continue extension from Open VSX
+RUN code-server --install-extension Continue.continue
+
+# Copy code-server config and runtime configs
 # code-server runs as root (upstream entrypoint behaviour), so configs go under /root
-USER root
-RUN mkdir -p /root/.config/code-server /root/.local/share/code-server/User
+RUN mkdir -p /root/.config/code-server /root/config
 COPY config/code-server.yaml /root/.config/code-server/config.yaml
-COPY config/settings.json /root/.local/share/code-server/User/settings.json
+COPY config/continue-config.yaml /root/config/continue-config.yaml
+COPY config/litellm-config.yaml /root/config/litellm-config.yaml
+COPY config/supervisord.conf /root/config/supervisord.conf
 
-# Copy MCP config (hostname substituted for container networking)
-COPY config/mcp-container.json /root/config/mcp.json
-
-# Use our entrypoint
-USER root
-COPY entrypoint.sh /home/coder/entrypoint.sh
-RUN chmod +x /home/coder/entrypoint.sh
-ENTRYPOINT ["/home/coder/entrypoint.sh"]
+# Set our entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

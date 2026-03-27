@@ -1,5 +1,0 @@
-{
-  "cline.apiProvider": "bedrock",
-  "cline.apiModelId": "anthropic.claude-sonnet-4-5",
-  "cline.awsRegion": "us-west-2"
-}
