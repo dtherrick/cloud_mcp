@@ -14,4 +14,8 @@ if [[ -f "${CONTINUE_CONFIG_TEMPLATE}" ]]; then
   echo "Continue config written to ${CONTINUE_CONFIG_DST}"
 fi
 
+# Pre-create package.json without a "main" entry so Continue loads config.yaml
+# rather than looking for a compiled config.js which doesn't exist yet
+echo '{"name":"continue-config","version":"1.0.0"}' > /root/.continue/package.json
+
 exec supervisord -c /root/config/supervisord.conf
