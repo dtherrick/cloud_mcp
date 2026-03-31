@@ -1,2 +1,3 @@
 # all configs should never be included
 docker/config/*
+docs/*
