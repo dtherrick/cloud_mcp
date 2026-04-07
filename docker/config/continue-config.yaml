@@ -1,0 +1,40 @@
+# ABOUTME: Continue extension configuration — models and MCP servers.
+# ABOUTME: Model points at local LiteLLM proxy — no API key needed in this file.
+
+name: cloud-ide
+version: 1.0.0
+
+models:
+  - name: GPT-5.4 Mini
+    provider: openai
+    model: gpt-5.4-mini
+    apiBase: http://localhost:4000
+    apiKey: ignored
+
+mcpServers:
+  - name: Context7
+    type: stdio
+    command: npx
+    args:
+      - -y
+      - "@upstash/context7-mcp"
+
+  - name: sequential-thinking
+    type: stdio
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-sequential-thinking"
+
+  - name: Playwright
+    type: stdio
+    command: npx
+    args:
+      - "@playwright/mcp@latest"
+
+  - name: splunk-mcp-server
+    type: streamable-http
+    url: https://host.containers.internal:8089/services/mcp
+    requestOptions:
+      headers:
+        Authorization: Bearer ${SPLUNK_MCP_TOKEN}

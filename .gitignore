@@ -1,3 +1,2 @@
-# all configs should never be included
-docker/config/*
-docs/*
+# Corporate TLS CA cert — sourced locally, never committed
+docker/config/cisco-ca.crt

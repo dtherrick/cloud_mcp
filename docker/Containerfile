@@ -14,9 +14,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install LiteLLM proxy
 RUN pip3 install --no-cache-dir --break-system-packages 'litellm[proxy]'
 
-# Inject Cisco TLS inspection CA into certifi's bundle so LiteLLM can reach external APIs
-COPY config/cisco-ca.crt /tmp/cisco-ca.crt
-RUN cat /tmp/cisco-ca.crt >> $(python3 -m certifi) && rm /tmp/cisco-ca.crt
+# --- Cisco TLS inspection proxy (uncomment if behind Cisco Umbrella or similar) ---
+# Place the corporate CA cert in PEM format at docker/config/cisco-ca.crt, then
+# uncomment the two lines below. To find the cert on your machine:
+#   macOS:  security find-certificate -c "Cisco" -p /Library/Keychains/System.keychain > docker/config/cisco-ca.crt
+#   Linux:  cp /etc/ssl/certs/cisco-umbrella*.pem docker/config/cisco-ca.crt  (path varies by distro/IT config)
+#   Either: check with your IT team — they may have a direct download URL for the PEM file
+# COPY config/cisco-ca.crt /tmp/cisco-ca.crt
+# RUN cat /tmp/cisco-ca.crt >> $(python3 -m certifi) && rm /tmp/cisco-ca.crt
+# ----------------------------------------------------------------------------------
 
 # Install Continue extension from Open VSX
 RUN code-server --install-extension Continue.continue
