@@ -40,11 +40,11 @@
 |---|---|
 | VS Code in a browser | `code-server` (codercom/code-server base image) |
 | AI coding assistant | Continue VS Code extension |
-| LLM API access | LiteLLM proxy (routes to OpenAI) |
+| LLM API access | LiteLLM proxy (routes to Cerebras) |
 | Library documentation lookups | Context7 MCP server (`@upstash/context7-mcp`) |
 | Structured reasoning | Sequential Thinking MCP server (`@modelcontextprotocol/server-sequential-thinking`) |
 | Browser automation | Playwright MCP server (`@playwright/mcp`) |
-| Splunk integration | Splunk MCP server (remote HTTP, bearer-token auth) |
+| Splunk integration | Splunk MCP server (`mcp-remote` stdio, bearer-token auth) |
 
 ---
 
@@ -58,12 +58,12 @@
 │  │  code-server │       │     LiteLLM proxy        │ │
 │  │  (port 8080) │       │  (localhost:4000 only)   │ │
 │  │              │       │                          │ │
-│  │  Continue    │──────▶│  model: gpt-5.4-mini     │ │
-│  │  extension   │ HTTP  │  (openai/gpt-5.4-mini)   │ │
+│  │  Continue    │──────▶│  model: llama3.1-8b    │ │
+│  │  extension   │ HTTP  │  (cerebras/llama3.1-8b)│ │
 │  │              │       └──────────┬───────────────┘ │
 │  │  MCP servers │                  │ HTTPS            │
 │  │  (npx stdio) │                  ▼                  │
-│  └──────────────┘          [OpenAI API]               │
+│  └──────────────┘          [Cerebras API]             │
 │                                                      │
 │         Both processes managed by supervisord        │
 └─────────────────────────────────────────────────────┘
@@ -73,7 +73,7 @@
 ```
 
 **Why LiteLLM sits in the middle:**  
-Continue is configured with `provider: openai` pointing at `http://localhost:4000`. LiteLLM translates these OpenAI-format calls to whichever upstream provider is configured (currently `openai/gpt-5.4-mini`). This means Continue never holds an API key — the key lives only in the LiteLLM process, injected via environment variable.
+Continue is configured with `provider: openai` pointing at `http://localhost:4000`. LiteLLM translates these OpenAI-format requests to whichever upstream provider is configured (currently `cerebras/llama3.1-8b`). This means Continue never holds an API key — the key lives only in the LiteLLM process, injected via environment variable.
 
 **Why supervisord:**  
 A container normally runs one process. supervisord acts as PID 1 and supervises both `code-server` and `litellm` as child processes, streaming their stdout/stderr to the container log, and restarting either if it crashes.
@@ -110,7 +110,7 @@ The build immediately switches to `USER root` and stays there for all subsequent
 
 LiteLLM is a Python package installed with `pip3 install 'litellm[proxy]'`. The `[proxy]` extra pulls in the HTTP server components needed to run `litellm --config ...`.
 
-**What it does:** Exposes an OpenAI-compatible REST API on `localhost:4000`. When Continue sends a `/v1/chat/completions` request, LiteLLM forwards it to the real OpenAI API, adds authentication, handles retries, and returns the response in the same OpenAI format Continue expects.
+**What it does:** Exposes an OpenAI-compatible REST API on `localhost:4000`. When Continue sends a `/v1/chat/completions` request, LiteLLM forwards it to the configured upstream provider (currently Cerebras), adds authentication, handles retries, and returns the response in the same OpenAI format Continue expects.
 
 **Why `--break-system-packages`:** The base Debian image uses an `externally-managed` Python environment. This flag overrides that guard. It is safe here because the container is purpose-built and we control its full contents.
 
@@ -155,9 +155,10 @@ Four MCP servers are configured:
 - **Note:** `@latest` (no `-y`) means npx checks for updates on every launch. Browser binaries are downloaded by Playwright on first use — this can take time and requires internet access.
 
 #### Splunk MCP Server
-- **Transport:** streamable-http (HTTP SSE)
+- **Transport:** stdio (via `mcp-remote`)
 - **URL:** `https://host.containers.internal:8089/services/mcp`
-- **Auth:** Bearer token (`Authorization: Bearer ${SPLUNK_MCP_TOKEN}`)
+- **Auth:** Bearer token passed as a `--header` argument to `mcp-remote`
+- **TLS:** `NODE_TLS_REJECT_UNAUTHORIZED=0` set in the process env — required because the Splunk endpoint uses a self-signed certificate
 - **Purpose:** Connects the AI to a Splunk instance. The AI can run SPL searches, retrieve events, and query Splunk data.
 - **`host.containers.internal`:** A special DNS name that resolves to the container host. On Podman on Mac, this resolves to the Mac's IP on the Podman bridge. On ECS, this would need to be replaced with the actual Splunk endpoint.
 - **Token injection:** `SPLUNK_MCP_TOKEN` is a `${...}` placeholder in the template file (`continue-config.yaml`). The entrypoint substitutes it with the actual value at runtime.
@@ -212,24 +213,24 @@ exec supervisord -c /root/config/supervisord.conf
 
 ```yaml
 model_list:
-  - model_name: gpt-5.4-mini
+  - model_name: llama3.1-8b
     litellm_params:
-      model: openai/gpt-5.4-mini
-      api_key: os.environ/OPENAI_API_KEY
+      model: cerebras/llama3.1-8b
+      api_key: os.environ/CEREBRAS_API_KEY
 
 general_settings:
   disable_spend_logs: true
 ```
 
-**`model_name: gpt-5.4-mini`** — The name Continue uses in its config (`model: gpt-5.4-mini`). This is the name Continue sends in its API requests to LiteLLM.
+**`model_name: llama3.1-8b`** — The name Continue uses in its config (`model: llama3.1-8b`). This is the name Continue sends in its API requests to LiteLLM.
 
-**`model: openai/gpt-5.4-mini`** — The LiteLLM provider/model string. The `openai/` prefix tells LiteLLM to route to the OpenAI API.
+**`model: cerebras/llama3.1-8b`** — The LiteLLM provider/model string. The `cerebras/` prefix tells LiteLLM to route to the Cerebras API.
 
-**`api_key: os.environ/OPENAI_API_KEY`** — LiteLLM reads the key from the `OPENAI_API_KEY` environment variable at runtime. The key is never written to any config file.
+**`api_key: os.environ/CEREBRAS_API_KEY`** — LiteLLM reads the key from the `CEREBRAS_API_KEY` environment variable at runtime. The key is never written to any config file.
 
 **`disable_spend_logs: true`** — Suppresses LiteLLM's SQLite-based spend tracking. This keeps the container stateless (no database file created on disk).
 
-**To use a different model:** Change `model_name` and `model` to match. Also update `continue-config.yaml` to reference the new `model_name`. Examples: `openai/gpt-4o`, `openai/gpt-4o-mini`, `anthropic/claude-opus-4-6`.
+**To use a different model:** Change `model_name` and `model` to match, and update the `api_key` env var for the new provider. Also update `continue-config.yaml` to reference the new `model_name`. See the provider table in the [setup guide](#step-3-review-and-adjust-configuration-optional) for common options.
 
 ### 4.2 `continue-config.yaml`
 
@@ -241,9 +242,9 @@ name: cloud-ide
 version: 1.0.0
 
 models:
-  - name: GPT-5.4 Mini
+  - name: Llama 3.3 70B (Cerebras)
     provider: openai
-    model: gpt-5.4-mini
+    model: llama3.1-8b
     apiBase: http://localhost:4000
     apiKey: ignored
 
@@ -264,21 +265,20 @@ mcpServers:
     args: ["@playwright/mcp@latest"]
 
   - name: splunk-mcp-server
-    type: streamable-http
-    url: https://host.containers.internal:8089/services/mcp
-    requestOptions:
-      headers:
-        Authorization: Bearer ${SPLUNK_MCP_TOKEN}
-      verifySsl: false
+    type: stdio
+    command: npx
+    args: [-y, mcp-remote, "https://host.containers.internal:8089/services/mcp", --header, "Authorization: Bearer ${SPLUNK_MCP_TOKEN}"]
+    env:
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
 ```
 
-**`apiBase: http://localhost:4000`** — Points Continue at the local LiteLLM proxy, not directly at OpenAI.
+**`apiBase: http://localhost:4000`** — Points Continue at the local LiteLLM proxy, not directly at the upstream provider.
 
-**`apiKey: ignored`** — Continue requires an `apiKey` field even when pointing at a proxy. LiteLLM ignores it; the real key is in `OPENAI_API_KEY`.
+**`apiKey: ignored`** — Continue requires an `apiKey` field even when pointing at a proxy. LiteLLM ignores it; the real key is in `CEREBRAS_API_KEY`.
 
 **`${SPLUNK_MCP_TOKEN}`** — The only variable substituted at runtime. All other values are static.
 
-**`verifySsl`** — Omitted from the default config (Continue treats the absence as `true`). Add `verifySsl: false` under `requestOptions` only if your Splunk instance uses a self-signed certificate. See [Environment-Specific Configuration](#14-environment-specific-configuration).
+**`NODE_TLS_REJECT_UNAUTHORIZED: "0"`** — Disables TLS verification for the `mcp-remote` Node.js process. Required because the Splunk endpoint uses a self-signed certificate.
 
 ### 4.3 `code-server.yaml`
 
@@ -311,7 +311,7 @@ This file exists in the repo but contains an empty `packages: {}` object. It is 
 
 | Variable | Required | Where used | Description |
 |---|---|---|---|
-| `OPENAI_API_KEY` | **Yes** | LiteLLM | OpenAI API key. LiteLLM reads this at startup and uses it for all outbound requests to the OpenAI API. |
+| `CEREBRAS_API_KEY` | **Yes** | LiteLLM | Cerebras API key. LiteLLM reads this at startup and uses it for all outbound requests to the Cerebras API. Get a free key at [cloud.cerebras.ai](https://cloud.cerebras.ai). |
 | `SPLUNK_MCP_TOKEN` | **Yes** (if Splunk MCP is used) | `entrypoint.sh` → `continue-config.yaml` | Bearer token for authenticating with the Splunk MCP HTTP endpoint. Substituted into the Continue config at startup. If unset, `envsubst` replaces the placeholder with an empty string, and the Splunk MCP server will fail to authenticate. |
 
 No other environment variables are required. However, the following are implicitly used:
@@ -352,10 +352,10 @@ Container starts
              │         └─ loads Continue extension
              │              └─ Continue reads /root/.continue/config.yaml
              │                   └─ spawns MCP server subprocesses (npx ...)
-             │                         └─ connects to splunk-mcp-server via HTTP
+             │                         └─ splunk-mcp-server: mcp-remote proxies to Splunk HTTPS
              │
              └─ [priority 2] starts litellm --config ... --host 127.0.0.1 --port 4000
-                  └─ LiteLLM reads OPENAI_API_KEY from environment
+                  └─ LiteLLM reads CEREBRAS_API_KEY from environment
                        └─ binds localhost:4000
 ```
 
@@ -371,14 +371,14 @@ User types in Continue chat (browser)
       ▼
 Continue extension (inside code-server)
       │  POST http://localhost:4000/v1/chat/completions
-      │  {model: "gpt-5.4-mini", messages: [...]}
+      │  {model: "llama3.1-8b", messages: [...]}
       ▼
 LiteLLM proxy (localhost:4000)
-      │  maps "gpt-5.4-mini" → openai/gpt-5.4-mini
-      │  adds Authorization: Bearer $OPENAI_API_KEY
-      │  POST https://api.openai.com/v1/chat/completions
+      │  maps "llama3.1-8b" → cerebras/llama3.1-8b
+      │  adds Authorization: Bearer $CEREBRAS_API_KEY
+      │  POST https://api.cerebras.ai/v1/chat/completions
       ▼
-OpenAI API
+Cerebras API
       │
       ▼  response streams back
 LiteLLM → Continue → browser
@@ -393,10 +393,10 @@ Continue spawns/calls MCP server
   ├─ stdio servers (Context7, sequential-thinking, Playwright):
   │    npx process already running, communicates via stdin/stdout
   │
-  └─ Splunk (streamable-http):
-       POST https://host.containers.internal:8089/services/mcp
-       Authorization: Bearer <token>
-       (SSL verification disabled)
+  └─ Splunk (stdio via mcp-remote):
+       npx mcp-remote https://host.containers.internal:8089/services/mcp
+       --header "Authorization: Bearer <token>"
+       NODE_TLS_REJECT_UNAUTHORIZED=0 (self-signed cert bypass)
 ```
 
 ---
@@ -410,7 +410,7 @@ This hostname is used in the Splunk MCP server URL. It is a special name that re
 - On **ECS/Linux:** this name does not exist by default. The Splunk URL must be changed to the actual Splunk hostname or IP when deploying to cloud infrastructure.
 
 **Outbound connectivity required:**
-- `api.openai.com` — LiteLLM → OpenAI API
+- `api.cerebras.ai` — LiteLLM → Cerebras API
 - `upstash.com` — Context7 MCP server
 - npm registry (`registry.npmjs.org`) — `npx` downloads MCP packages on first use
 - Your Splunk endpoint — Splunk MCP server
@@ -421,7 +421,7 @@ This hostname is used in the Splunk MCP server URL. It is a special name that re
 
 | Concern | Approach |
 |---|---|
-| API keys | `OPENAI_API_KEY` is never written to disk; only held in the LiteLLM process environment. `SPLUNK_MCP_TOKEN` is written into `/root/.continue/config.yaml` at runtime — this file is in the container's ephemeral filesystem. |
+| API keys | `CEREBRAS_API_KEY` is never written to disk; only held in the LiteLLM process environment. `SPLUNK_MCP_TOKEN` is written into `/root/.continue/config.yaml` at runtime — this file is in the container's ephemeral filesystem. |
 | code-server auth | Disabled (`auth: none`). Access control must be enforced upstream (ALB, VPN, firewall). **Do not expose port 8080 to the public internet without an authentication layer.** |
 | LiteLLM exposure | LiteLLM binds to `127.0.0.1:4000` only. It is not reachable from outside the container. |
 | TLS verification | Both Python (LiteLLM/certifi) and Node.js (MCP stdio servers) verify TLS normally by default. See [Environment-Specific Configuration](#14-environment-specific-configuration) if you need to override this for self-signed certs or a TLS inspection proxy. |
@@ -445,8 +445,8 @@ These must be present on the machine that **builds and runs** the container.
 | Requirement | Notes |
 |---|---|
 | Container runtime (same as above) | Must be running (Podman machine started on Mac) |
-| Outbound internet access | LiteLLM calls OpenAI; `npx` downloads MCP servers on first use; Context7 calls Upstash |
-| `OPENAI_API_KEY` | Valid OpenAI API key with access to the configured model |
+| Outbound internet access | LiteLLM calls Cerebras; `npx` downloads MCP servers on first use; Context7 calls Upstash |
+| `CEREBRAS_API_KEY` | Free Cerebras API key — get one at [cloud.cerebras.ai](https://cloud.cerebras.ai) |
 | `SPLUNK_MCP_TOKEN` | Bearer token for your Splunk MCP endpoint (required only if the Splunk MCP server is in use) |
 | Splunk MCP server accessible | The URL `https://host.containers.internal:8089/services/mcp` must be reachable from inside the container. Change this URL in `continue-config.yaml` if your Splunk endpoint is elsewhere. |
 
@@ -497,23 +497,33 @@ cd cloud_mcp
 
 ### Step 3: Review and adjust configuration (optional)
 
-**To use a different OpenAI model:**
+**To use a different model or provider:**
 
-Edit `docker/config/litellm-config.yaml` — change both occurrences of `gpt-5.4-mini`:
+Edit `docker/config/litellm-config.yaml` — change `model_name` (the internal alias) and `model` (the LiteLLM provider/model string), and update the `api_key` env var to match the provider:
 ```yaml
 model_list:
-  - model_name: gpt-4o-mini          # ← name Continue will use
+  - model_name: gemini-flash          # ← name Continue will use
     litellm_params:
-      model: openai/gpt-4o-mini      # ← actual OpenAI model
-      api_key: os.environ/OPENAI_API_KEY
+      model: gemini/gemini-1.5-flash  # ← LiteLLM provider/model string
+      api_key: os.environ/GEMINI_API_KEY
 ```
 
-Then update `docker/config/continue-config.yaml` to match:
+Then update `docker/config/continue-config.yaml` to match the `model_name`:
 ```yaml
 models:
-  - name: GPT-4o Mini
-    model: gpt-4o-mini               # ← must match model_name above
+  - name: Gemini 1.5 Flash
+    model: gemini-flash               # ← must match model_name above
 ```
+
+LiteLLM provider strings for common free-tier options:
+
+| Provider | Model string | API key env var |
+|---|---|---|
+| Cerebras (current) | `cerebras/llama3.1-8b` | `CEREBRAS_API_KEY` |
+| Google Gemini | `gemini/gemini-1.5-flash` | `GEMINI_API_KEY` |
+| Groq | `groq/llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| Ollama (local) | `ollama/llama3.2` | none (set `api_base: http://host.containers.internal:11434`) |
+| OpenAI | `openai/gpt-4o-mini` | `OPENAI_API_KEY` |
 
 **To change the Splunk MCP endpoint:**
 
@@ -551,7 +561,7 @@ The build takes 3–8 minutes on first run (downloading base image, installing p
 ```bash
 podman run -d \
   -p 8080:8080 \
-  -e OPENAI_API_KEY=sk-your-key-here \
+  -e CEREBRAS_API_KEY=your-key-here \
   -e SPLUNK_MCP_TOKEN=placeholder \
   --name cloud-ide \
   cloud-ide
@@ -561,7 +571,7 @@ podman run -d \
 ```bash
 podman run -d \
   -p 8080:8080 \
-  -e OPENAI_API_KEY=sk-your-key-here \
+  -e CEREBRAS_API_KEY=your-key-here \
   -e SPLUNK_MCP_TOKEN=your-splunk-bearer-token \
   --name cloud-ide \
   cloud-ide
@@ -632,16 +642,16 @@ If that fails, LiteLLM crashed:
 ```bash
 podman logs cloud-ide | grep -i "litellm\|error"
 ```
-Common cause: `OPENAI_API_KEY` is missing or invalid.
+Common cause: `CEREBRAS_API_KEY` is missing or invalid.
 
 ---
 
-### "Invalid API key" error from OpenAI
+### "Invalid API key" error from Cerebras
 
-Your `OPENAI_API_KEY` is incorrect or lacks access to the configured model. Verify with:
+Your `CEREBRAS_API_KEY` is incorrect. Verify with:
 ```bash
-curl https://api.openai.com/v1/models \
-  -H "Authorization: Bearer $OPENAI_API_KEY" | head -c 200
+curl https://api.cerebras.ai/v1/models \
+  -H "Authorization: Bearer $CEREBRAS_API_KEY" | head -c 200
 ```
 
 ---
@@ -706,19 +716,7 @@ The default configuration assumes standard TLS (trusted CA, no interception prox
 
 ### Self-signed certificate on the Splunk endpoint
 
-If your Splunk instance uses a self-signed certificate, Continue will refuse the connection with a TLS verification error. Add `verifySsl: false` to the Splunk MCP server entry in `docker/config/continue-config.yaml`:
-
-```yaml
-  - name: splunk-mcp-server
-    type: streamable-http
-    url: https://host.containers.internal:8089/services/mcp
-    requestOptions:
-      headers:
-        Authorization: Bearer ${SPLUNK_MCP_TOKEN}
-      verifySsl: false       # ← add this line
-```
-
-This disables TLS verification only for the Splunk MCP connection. All other connections (LiteLLM → OpenAI, npx MCP servers) are unaffected.
+TLS verification is already disabled for the Splunk MCP connection via `NODE_TLS_REJECT_UNAUTHORIZED=0` in the `mcp-remote` process env — no additional configuration is needed. All other connections (LiteLLM → Cerebras, other npx MCP servers) verify TLS normally.
 
 ---
 

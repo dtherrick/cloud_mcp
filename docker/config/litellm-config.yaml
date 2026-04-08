@@ -2,10 +2,10 @@
 # ABOUTME: OPENAI_API_KEY is read from the environment at runtime.
 
 model_list:
-  - model_name: gpt-5.4-mini
+  - model_name: llama3.1-8b
     litellm_params:
-      model: openai/gpt-5.4-mini
-      api_key: os.environ/OPENAI_API_KEY
+      model: cerebras/llama3.1-8b
+      api_key: os.environ/CEREBRAS_API_KEY
 
 general_settings:
   disable_spend_logs: true

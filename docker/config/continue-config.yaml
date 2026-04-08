@@ -5,9 +5,9 @@ name: cloud-ide
 version: 1.0.0
 
 models:
-  - name: GPT-5.4 Mini
+  - name: Llama 3.1 8B (Cerebras)
     provider: openai
-    model: gpt-5.4-mini
+    model: llama3.1-8b
     apiBase: http://localhost:4000
     apiKey: ignored
 
@@ -33,8 +33,13 @@ mcpServers:
       - "@playwright/mcp@latest"
 
   - name: splunk-mcp-server
-    type: streamable-http
-    url: https://host.containers.internal:8089/services/mcp
-    requestOptions:
-      headers:
-        Authorization: Bearer ${SPLUNK_MCP_TOKEN}
+    type: stdio
+    command: npx
+    args:
+      - -y
+      - mcp-remote
+      - https://host.containers.internal:8089/services/mcp
+      - --header
+      - "Authorization: Bearer ${SPLUNK_MCP_TOKEN}"
+    env:
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
