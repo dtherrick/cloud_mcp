@@ -520,10 +520,13 @@ LiteLLM provider strings for common free-tier options:
 | Provider | Model string | API key env var |
 |---|---|---|
 | Cerebras (current) | `cerebras/llama3.1-8b` | `CEREBRAS_API_KEY` |
+| AWS Bedrock | `bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0` | see note below |
 | Google Gemini | `gemini/gemini-1.5-flash` | `GEMINI_API_KEY` |
 | Groq | `groq/llama-3.3-70b-versatile` | `GROQ_API_KEY` |
 | Ollama (local) | `ollama/llama3.2` | none (set `api_base: http://host.containers.internal:11434`) |
 | OpenAI | `openai/gpt-4o-mini` | `OPENAI_API_KEY` |
+
+**Bedrock auth:** Bedrock uses AWS credentials instead of a single API key. LiteLLM reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION_NAME` from the environment. On ECS with a task IAM role attached, no credentials are needed — LiteLLM picks up the role automatically. Do not set `api_key` in `litellm_params` for Bedrock. Other Bedrock model strings: `bedrock/anthropic.claude-3-7-sonnet-20250219-v1:0`, `bedrock/amazon.nova-pro-v1:0`, `bedrock/amazon.nova-lite-v1:0`. See the [LiteLLM Bedrock docs](https://docs.litellm.ai/docs/providers/bedrock) for the full model list.
 
 **To change the Splunk MCP endpoint:**
 
